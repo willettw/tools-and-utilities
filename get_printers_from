@@ -1,0 +1,30 @@
+#!/bin/bash
+srv=$1
+isalive=$(ping -c1 ${srv} | grep % | awk '{print $6}' | cut -c1)
+tmpdir=/root/ppdtmp
+prtfile=${tmpdir}/printers.txt
+
+if [[ ${isalive} != 0 ]]; then
+   printf "Server ${srv} is down\n"
+   exit
+fi
+
+if [ ! -d ${tmpdir} ]; then mkdir ${tmpdir}; fi
+
+# Get printer list from old server
+ssh ${srv} lpstat -v >${prtfile}
+scp ${srv}:/etc/cups/ppd/*.ppd ${tmpdir} >/dev/null
+scp ${srv}:/etc/cups/lpoptions ${tmpdir} >/dev/null
+
+
+# Create script that will create the printers
+cat ${prtfile} | sed -e 's/device for //' -e 's/: / /' | \
+   (while read p u; do
+      if [ -e ${tmpdir}/${p}.ppd ]; then
+         echo lpadmin -p ${p} -P ${tmpdir}/${p}.ppd -v ${u} -E
+      else
+         echo lpadmin -p ${p} -v ${u} -E
+      fi
+    done) >${tmpdir}/create_printers
+
+echo cat ${tmpdir}/lpoptions \>\>/etc/cups/lpoptions >>${tmpdir}/create_printers
