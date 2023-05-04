@@ -1,0 +1,21 @@
+#!/bin/bash
+
+if [[ $# -ne 3 ]]; then
+  echo "Usage: $0 subject recipients bodyfile"
+  exit 1
+fi
+
+# Extract the command line arguments
+subject="$1"
+recipients="$2"
+bodyfile="$3"
+
+# Read the HTML body from the file
+body=$(cat "$bodyfile")
+
+# Compose the email message with MIME headers
+message=$(echo -e "To: $recipients\nSubject: $subject\nMIME-Version: 1.0\nContent-Type: text/html\n\n$body")
+
+# Send the email using the sendmail command
+echo -e "$message" | sendmail -t
+
