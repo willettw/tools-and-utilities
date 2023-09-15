@@ -17,5 +17,7 @@ body=$(cat "$bodyfile")
 message=$(echo -e "To: $recipients\nSubject: $subject\nMIME-Version: 1.0\nContent-Type: text/html\n\n$body")
 
 # Send the email using the sendmail command
-echo -e "$message" | sendmail -t
+echo -e "$message" | /usr/sbin/sendmail -t
+#echo -e "$message" >/tmp/message
+#echo "sent"
 
