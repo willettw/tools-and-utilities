@@ -1,7 +1,8 @@
 #!/bin/python3
-
 import os, argparse
 import sys, subprocess
+
+sys.path.append('/usr/lib/custom_python_modules')
 import myfuncs, mydicts, myemail
 
 def parse_command_line():
