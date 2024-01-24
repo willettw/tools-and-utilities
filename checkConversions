@@ -1,0 +1,24 @@
+#!/usr/bin/bash
+#
+# checkPrdConversions
+#
+# check status every x mins
+# email update to those interested
+# 
+#
+recipients=$1
+outfile=/tmp/$$.out
+outfile_html=${outfile}.html
+
+#echo ${outfile}
+#echo ${outfile_html}
+
+ssh epicpoc /home/dbarpt/scripts/checkConversions.ksh prd >${outfile}
+
+# Convert to html
+/home/wwillett/repos/bash_scripts/convert_psf_to_html ${outfile} ${outfile_html}
+
+# Mail report
+/home/wwillett/repos/bash_scripts/mailit "PRD Conversions Update" "${recipients}" ${outfile_html}
+rm ${outfile} ${outfile_html}
+
