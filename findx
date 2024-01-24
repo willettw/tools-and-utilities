@@ -1,0 +1,3 @@
+#!/bin/bash
+filespec=$1
+find /  \( -name usr -o -name var -o -name proc -o -name etc -o -name prdfiles -o -name nprdfiles \) -prune -o -name "${filespec}"
