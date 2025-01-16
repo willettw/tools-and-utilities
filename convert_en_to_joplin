@@ -1,0 +1,116 @@
+#!/usr/bin/env python3
+import os
+import sys
+import argparse
+from bs4 import BeautifulSoup
+from markdownify import markdownify as md
+import html
+import xml.dom.minidom
+
+def format_enex_content(enex_content):
+    """
+    Format a one-line .enex file content with carriage returns and proper indentation.
+    """
+    try:
+        # Parse the one-line XML content
+        dom = xml.dom.minidom.parseString(enex_content)
+        # Pretty-print the XML content
+        pretty_xml_as_string = dom.toprettyxml(indent="  ")
+        print(pretty_xml_as_string)
+    except Exception as e:
+        print(f"Error formatting .enex content: {e}")
+
+def parse_enex(file_path):
+    """
+    Parse the .enex file and extract the content within <en-note> tags.
+    """
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+            # Replace HTML entities with their corresponding characters
+            content = html.unescape(content)
+            # Use BeautifulSoup to handle malformed XML/HTML
+            soup = BeautifulSoup(content, 'html.parser')
+            # Find all <en-note> elements
+            notes = soup.find_all('en-note')
+            return notes
+    except Exception as e:
+        print(f"Warning: Error parsing {file_path}: {e}")
+        return []
+
+def convert_enml_to_markdown(enml_content):
+    """
+    Convert ENML (Evernote Markup Language) content to Markdown.
+    """
+    # BeautifulSoup can handle ENML as it's a subset of HTML
+    soup = BeautifulSoup(enml_content, 'html.parser')
+    # Convert the soup object to HTML string
+    html_content = str(soup)
+    # Use markdownify to convert HTML to Markdown
+    markdown = md(html_content, heading_style="ATX")
+    return markdown
+
+def process_enex_file(file_path, output_dir):
+    """
+    Process a single .enex file: extract notes and convert them to Markdown.
+    """
+    notes = parse_enex(file_path)
+    if not notes:
+        # Create a placeholder file if parsing fails
+        output_file = os.path.join(output_dir, f"{os.path.splitext(os.path.basename(file_path))[0]}_error.md")
+        with open(output_file, 'w', encoding='utf-8') as f:
+            f.write(f"Warning: Failed to parse {file_path}")
+        print(f"Created placeholder file for {file_path}")
+        return
+
+    for idx, note in enumerate(notes):
+        try:
+            enml_content = str(note)
+            markdown_content = convert_enml_to_markdown(enml_content)
+            output_file = os.path.join(output_dir, f"note_{idx + 1}.md")
+            with open(output_file, 'w', encoding='utf-8') as f:
+                f.write(markdown_content)
+            print(f"Converted note {idx + 1} from {file_path} to {output_file}")
+        except Exception as e:
+            print(f"Warning: Error processing note {idx + 1} from {file_path}: {e}")
+            # Create a placeholder file for the failed note
+            output_file = os.path.join(output_dir, f"note_{idx + 1}_error.md")
+            with open(output_file, 'w', encoding='utf-8') as f:
+                f.write(f"Warning: Failed to process note {idx + 1} from {file_path}")
+
+def batch_convert(input_dir, output_dir):
+    """
+    Batch convert all .enex files in the input directory to Markdown files in the output directory.
+    """
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
+    # Iterate over all .enex files in the input directory
+    for file_name in os.listdir(input_dir):
+        if file_name.lower().endswith('.enex'):
+            file_path = os.path.join(input_dir, file_name)
+            process_enex_file(file_path, output_dir)
+
+def main():
+    parser = argparse.ArgumentParser(description="Convert Evernote .enex files to Markdown.")
+    parser.add_argument('-i', '--input', required=True, help="Input directory containing .enex files.")
+    parser.add_argument('-o', '--output', required=True, help="Output directory for Markdown files.")
+    try:
+        args = parser.parse_args()
+    except argparse.ArgumentError as e:
+        print(e)
+        parser.print_help()
+        sys.exit(2)
+
+    input_dir = args.input
+    output_dir = args.output
+
+    if not os.path.isdir(input_dir):
+        print(f"Input directory '{input_dir}' does not exist or is not a directory.")
+        return
+
+    batch_convert(input_dir, output_dir)
+    print("Conversion completed.")
+
+if __name__ == "__main__":
+    main()
