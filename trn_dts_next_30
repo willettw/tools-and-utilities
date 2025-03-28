@@ -1,0 +1,146 @@
+#!/usr/bin/env python3
+import subprocess
+import sys
+import datetime
+import argparse
+
+# Define the server and environment mapping
+server_env_map = {
+    "srv-02-1100": ["poc", "tst"],
+    "srv-02-1102": ["rel", "sup"],
+    "srv-02-1103": ["prd"],
+    "srv-02-1104": ["rpt"],
+    "srv-02-1105": ["mst", "ref", "prep", "ace01", "ace02", "ply", "exm", "nvt"],
+    "srv-01-1111": ["dr"],
+    "srv-01-1112": ["sro"]
+}
+
+def validate_server_env(server_env):
+    for server, envs in server_env_map.items():
+        if server_env == server or server_env in envs:
+            return True
+    return False
+
+def get_target_envs(envs_param):
+    target_envs = []
+    for item in envs_param.split(','):
+        item = item.strip()
+        if item in server_env_map:
+            target_envs.extend(server_env_map[item])
+        elif validate_server_env(item):
+            target_envs.append(item)
+        else:
+            print(f"Invalid server or environment name: {item}")
+            sys.exit(1)
+    return target_envs
+
+def schedule_downtime(env, minutes, start_time, debug):
+    for server, envs in server_env_map.items():
+        if env in envs:
+            start_time_dt = datetime.datetime.strptime(start_time, '%m/%d/%Y %H:%M')
+            end_time_dt = start_time_dt + datetime.timedelta(minutes=minutes)
+            start_time_iso = start_time_dt.strftime('%Y-%m-%dT%H:%M')
+            end_time_iso = end_time_dt.strftime('%Y-%m-%dT%H:%M')
+            cmd = f"ssh epicadm@{server} '/epic/{env}/bin/dts --add --type single --start_time {start_time_iso} --end_time {end_time_iso} --description \"Scheduled downtime\"'"
+            if debug:
+                print(f"Executing: {cmd}")
+            if not debug:
+                subprocess.run(cmd, shell=True, check=True)
+            return server, start_time_iso, end_time_iso
+    return None, None, None
+
+def parse_start_time(start_time):
+    for fmt in ('%m/%d/%Y %H:%M', '%-m/%-d/%Y %H:%M'):
+        try:
+            return datetime.datetime.strptime(start_time, fmt)
+        except ValueError:
+            continue
+    raise ValueError("Invalid start time format. Use m/d/yyyy H:M format.")
+
+def schedule_downtimes(target_envs, minutes, start_time, debug):
+    print()  # Print a blank line at the start
+    for env in target_envs:
+        for server, envs in server_env_map.items():
+            if env in envs:
+                print('.', end='', flush=True)
+                schedule_downtime(env, minutes, start_time, debug)
+                break
+    print()  # Print a blank line at the end
+
+def generate_report(target_envs, debug):
+    report = []
+    print()  # Print a blank line at the start
+    for env in target_envs:
+        for server, envs in server_env_map.items():
+            if env in envs:
+                print('.', end='', flush=True)
+                start_time, end_time, duration = poll_schedule(server, env, debug)
+                report.append((server, env, start_time, end_time, duration))
+                break
+    print()  # Print a blank line at the end
+    return report
+
+def poll_schedule(server, env, debug):
+    cmd = f"ssh epicadm@{server} '/epic/{env}/bin/dts --show_schedule'"
+    if debug:
+        print(f"Polling: {cmd}")
+    if not debug:
+        result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+        output = result.stdout.strip()
+        if "No downtime events are scheduled" in output:
+            return "No downtime events are scheduled", "", ""
+        else:
+            start_time = None
+            end_time = None
+            duration = None
+            for line in output.split('\n'):
+                if "Scheduled start time" in line and start_time is None:
+                    start_time = line.split(':', 1)[1].strip()
+                if "Scheduled end time" in line and end_time is None:
+                    end_time = line.split(':', 1)[1].strip()
+                if "Duration" in line and duration is None:
+                    duration = line.split(':', 1)[1].strip()
+            if start_time and end_time:
+                start_time = datetime.datetime.strptime(start_time, '%Y-%m-%dT%H:%M:%S%z').strftime('%m/%d/%Y %H:%M')
+                end_time = datetime.datetime.strptime(end_time, '%Y-%m-%dT%H:%M:%S%z').strftime('%m/%d/%Y %H:%M')
+            return start_time, end_time, duration
+    return "Debug mode: schedule not polled", "", ""
+
+def main():
+    parser = argparse.ArgumentParser(description='Schedule downtime for Epic environments.')
+    parser.add_argument('--envs', required=True, help='Comma separated list of server or environment names')
+    parser.add_argument('--mins', required=True, type=int, help='Number of minutes of downtime desired')
+    parser.add_argument('--start', required=True, help='Start time in m/d/yyyy H:M format')
+    parser.add_argument('--debug', action='store_true', help='Enable debug mode')
+    parser.add_argument('--report', action='store_true', help='Generate report only')
+
+    args = parser.parse_args()
+
+    envs_param = args.envs
+    minutes = args.mins
+    start_time = args.start
+    debug = args.debug
+    report_only = args.report
+
+    try:
+        print(f"start_time: {start_time}")
+        parse_start_time(start_time)
+    except ValueError as e:
+        print(e)
+        sys.exit(1)
+
+    target_envs = get_target_envs(envs_param)
+    print(f"Target environments: {target_envs}")
+
+    if not report_only:
+        schedule_downtimes(target_envs, minutes, start_time, debug)
+
+    report = generate_report(target_envs, debug)
+    print("Downtime Schedule Report:")
+    print(f"{'Server':<20} {'Environment':<20} {'Start Time':<20} {'End Time':<20} {'Duration':<20}")
+    print("="*100)
+    for server, env, start_time, end_time, duration in report:
+        print(f"{server:<20} {env:<20} {start_time:<20} {end_time:<20} {duration:<20}")
+
+if __name__ == "__main__":
+    main()
