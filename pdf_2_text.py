@@ -17,7 +17,8 @@ import warnings
 import os
 
 # Add the path to myfuncs
-sys.path.append("/home/wwillett/repos/scripts/custom_python_modules")
+sys.path.insert(0, '/usr/lib/custom_python_modules')
+sys.path.insert(1, str(Path(__file__).parent / "custom_python_modules"))
 from myfuncs import logit
 
 
@@ -83,7 +84,7 @@ def main():
     try:
         args = parser.parse_args()
     except SystemExit:
-        logit("Error parsing arguments. Please check your input.", None, args.debug, args.verbose)
+        print("Error parsing arguments. Please check your input.", file=sys.stderr)
         return
 
     # Debugging: Print parsed arguments if debug mode is enabled
