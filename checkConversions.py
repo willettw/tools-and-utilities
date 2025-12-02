@@ -1,8 +1,10 @@
 #!/bin/python3
 import os, argparse
 import sys, subprocess
+from pathlib import Path
 
-sys.path.append('/usr/lib/custom_python_modules')
+sys.path.insert(0, '/usr/lib/custom_python_modules')
+sys.path.insert(1, str(Path(__file__).parent / 'custom_python_modules'))
 import myfuncs, mydicts, myemail
 
 def parse_command_line():
