@@ -46,6 +46,7 @@ import os
 import re
 import smtplib
 import socket
+import subprocess
 import sys
 import tempfile
 from collections import defaultdict
@@ -106,6 +107,11 @@ class CUPSMonitor:
         self.dry_run: bool = False
         self.stdout_mode: bool = False
         self.syslog_file: str = DEFAULT_SYSLOG_FILE
+        
+        # IRIS database settings
+        self.iris_instance: str = "poc"
+        self.iris_namespace: str = "poc"
+        self.iris_routine: str = "EPRInfo^ZwwUtilities"
         
         # Email settings
         self.email_subject: str = f"CUPS Print Activity Report - {socket.gethostname()}"
@@ -198,6 +204,13 @@ class CUPSMonitor:
                     self.logger.debug(f"Loaded end_date from config: {self.end_date}")
                 except ValueError as e:
                     self.logger.warning(f"Invalid end_date in config: {e}")
+            
+            # IRIS settings
+            if 'iris' in defaults:
+                iris_cfg = defaults['iris']
+                self.iris_instance = iris_cfg.get('instance', self.iris_instance)
+                self.iris_namespace = iris_cfg.get('namespace', self.iris_namespace)
+                self.iris_routine = iris_cfg.get('routine', self.iris_routine)
             
             # Email settings
             if 'email' in defaults:
@@ -400,6 +413,103 @@ class CUPSMonitor:
         self.logger.debug(f"Collected {len(print_jobs)} entries from file log")
         return print_jobs
     
+    def get_epr_info(self, printer: str) -> List[Tuple[str, str, str]]:
+        """
+        Get EPR information from IRIS for a printer.
+        
+        Args:
+            printer: Printer name
+            
+        Returns:
+            List of tuples (EPR_ID, EPR_Name, Default_Command) for all EPR entries.
+            If multiple EPR entries exist (MAIN, ALT, OPT), returns all of them.
+        """
+        if self.dry_run:
+            return [("DRY-001", "Dry Run Printer", "DRY-CMD")]
+        
+        # Build IRIS command using echo and pipe to pass the command to irissession
+        # This is needed because irissession doesn't handle complex commands well as arguments
+        iris_routine_call = f'd {self.iris_routine}("{printer}")'
+        cmd = f'echo \'{iris_routine_call}\' | irissession {self.iris_instance} -U{self.iris_namespace}'
+        
+        self.logger.debug(f"Getting EPR info for printer: {printer}")
+        self.logger.debug(f"Command: {cmd}")
+        
+        try:
+            result = subprocess.run(
+                cmd,
+                shell=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=30,
+                universal_newlines=True
+            )
+            
+            if result.returncode != 0:
+                self.logger.warning(f"IRIS command failed for {printer}: {result.stderr.strip()}")
+                return []
+            
+            # Parse output - expected format (whitespace-separated):
+            # EPR_ID    EPR_Name    Default_Command
+            # Example: 240590    PTR-WAL-121-059-MAIN    /epic/bin/print.ksh '/usr/bin/lp -dUFH-WL-059' '\033&l1H'
+            # May return multiple rows (MAIN, ALT, OPT) - we return all of them
+            output = result.stdout.strip()
+            if not output:
+                self.logger.debug(f"No EPR info found for {printer}")
+                return []
+            
+            self.logger.debug(f"Raw IRIS output for {printer}: {repr(output)}")
+            
+            # Process all non-empty lines
+            epr_entries = []
+            lines = output.split('\n')
+            self.logger.debug(f"IRIS output has {len(lines)} lines")
+            
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    continue
+                
+                # Skip lines that look like IRIS prompts or system info
+                if line.startswith('PRD>') or line.startswith('USER>') or '>' in line[:10]:
+                    self.logger.debug(f"Skipping prompt line: {line}")
+                    continue
+                
+                # Skip IRIS system info lines
+                if line.startswith('Node:') or line.startswith('Instance:'):
+                    self.logger.debug(f"Skipping system info line: {line}")
+                    continue
+                
+                # Split on whitespace, limiting to 3 parts (EPR_ID, EPR_Name, and rest is Default_Command)
+                parts = line.split(None, 2)
+                self.logger.debug(f"Line split into {len(parts)} parts: {parts[:2] if len(parts) >= 2 else parts}")
+                
+                if len(parts) >= 3:
+                    epr_id = parts[0].strip()
+                    epr_name = parts[1].strip()
+                    default_cmd = parts[2].strip()
+                    epr_entries.append((epr_id, epr_name, default_cmd))
+                    self.logger.debug(f"EPR info for {printer}: ID={epr_id}, Name={epr_name}, Cmd={default_cmd}")
+                else:
+                    self.logger.debug(f"Skipping incomplete line ({len(parts)} parts): {line}")
+            
+            if not epr_entries:
+                self.logger.warning(f"No valid EPR info found for {printer}")
+            else:
+                self.logger.debug(f"Found {len(epr_entries)} EPR entries for {printer}")
+            
+            return epr_entries
+                
+        except subprocess.TimeoutExpired:
+            self.logger.warning(f"Timeout getting EPR info for {printer}")
+            return []
+        except FileNotFoundError:
+            self.logger.warning("irissession command not found - EPR info will not be available")
+            return []
+        except Exception as e:
+            self.logger.warning(f"Error getting EPR info for {printer}: {e}")
+            return []
+    
     def detect_cups_logging_method(self) -> bool:
         """
         Detect CUPS logging method.
@@ -458,13 +568,19 @@ class CUPSMonitor:
             unique_dates = len(set(date for printer, user, date in print_jobs.keys()))
             
             # Aggregate totals and most recent date by printer across all dates
+            # Also get EPR info for each printer
             printer_totals: Dict[str, int] = defaultdict(int)
             printer_most_recent: Dict[str, str] = {}
+            printer_epr_info: Dict[str, List[Tuple[str, str, str]]] = {}
+            
             for (printer, user, date), count in print_jobs.items():
                 printer_totals[printer] += count
                 # Update most recent date for this printer
                 if printer not in printer_most_recent or date > printer_most_recent[printer]:
                     printer_most_recent[printer] = date
+                # Get EPR info (only once per printer)
+                if printer not in printer_epr_info:
+                    printer_epr_info[printer] = self.get_epr_info(printer)
             
             self.logger.info(f"=== CUPS Print Activity Summary ({timestamp}) ===")
             self.logger.info(f"Monitoring period: {period_desc}")
@@ -480,11 +596,19 @@ class CUPSMonitor:
             # Output CSV data
             if self.stdout_mode:
                 # Print to stdout
-                print("printer,most_recent_date,total_jobs")
+                print("printer,most_recent_date,total_jobs,EPR_ID,EPR_Name,Default_Command")
                 for printer in sorted(printer_totals.keys()):
                     most_recent = printer_most_recent[printer]
                     total = printer_totals[printer]
-                    print(f"{printer},{most_recent},{total}")
+                    epr_entries = printer_epr_info.get(printer, [])
+                    
+                    if epr_entries:
+                        # Print one row per EPR entry
+                        for epr_id, epr_name, default_cmd in epr_entries:
+                            print(f"{printer},{most_recent},{total},{epr_id},{epr_name},{default_cmd}")
+                    else:
+                        # No EPR entries, print one row with empty EPR fields
+                        print(f"{printer},{most_recent},{total},,,")
             else:
                 # Write to CSV file
                 try:
@@ -497,13 +621,21 @@ class CUPSMonitor:
                         writer = csv.writer(f, delimiter=' ')
                         
                         # Write header
-                        writer.writerow(['printer', 'most_recent_date', 'total_jobs'])
+                        writer.writerow(['printer', 'most_recent_date', 'total_jobs', 'EPR_ID', 'EPR_Name', 'Default_Command'])
                         
                         # Write data sorted by printer name
                         for printer in sorted(printer_totals.keys()):
                             most_recent = printer_most_recent[printer]
                             total = printer_totals[printer]
-                            writer.writerow([printer, most_recent, total])
+                            epr_entries = printer_epr_info.get(printer, [])
+                            
+                            if epr_entries:
+                                # Write one row per EPR entry
+                                for epr_id, epr_name, default_cmd in epr_entries:
+                                    writer.writerow([printer, most_recent, total, epr_id, epr_name, default_cmd])
+                            else:
+                                # No EPR entries, write one row with empty EPR fields
+                                writer.writerow([printer, most_recent, total, '', '', ''])
                     
                     self.logger.info(f"CSV data written to: {output_file}")
                     self.logger.info(f"Wrote {len(printer_totals)} rows (one per printer)")
