@@ -203,7 +203,10 @@ class CUPSMonitor:
             if 'email' in defaults:
                 email_cfg = defaults['email']
                 self.email_recipient = email_cfg.get('recipient', self.email_recipient)
-                self.email_subject = email_cfg.get('subject', self.email_subject)
+                subject = email_cfg.get('subject', self.email_subject)
+                # Expand $(hostname) in subject line
+                subject = subject.replace('$(hostname)', socket.gethostname())
+                self.email_subject = subject
                 self.attach_csv = email_cfg.get('attach_csv', True)
                 self.include_summary = email_cfg.get('include_summary_in_body', True)
             
@@ -489,15 +492,12 @@ class CUPSMonitor:
                     output_path = Path(output_file)
                     output_path.parent.mkdir(parents=True, exist_ok=True)
                     
-                    # Check if file exists to determine if we need a header
-                    file_exists = output_path.exists() and output_path.stat().st_size > 0
-                    
-                    with open(output_file, 'a', newline='') as f:
-                        writer = csv.writer(f)
+                    # Write/overwrite file with current data
+                    with open(output_file, 'w', newline='') as f:
+                        writer = csv.writer(f, delimiter=' ')
                         
-                        # Write header only if file is new
-                        if not file_exists:
-                            writer.writerow(['printer', 'most_recent_date', 'total_jobs'])
+                        # Write header
+                        writer.writerow(['printer', 'most_recent_date', 'total_jobs'])
                         
                         # Write data sorted by printer name
                         for printer in sorted(printer_totals.keys()):
@@ -520,15 +520,22 @@ class CUPSMonitor:
             self.logger.debug("No email recipient specified, skipping email")
             return True
         
-        # Clean and validate email
-        recipient = recipient.strip()
+        # Split comma-separated recipients and clean
+        recipients = [r.strip() for r in recipient.split(',') if r.strip()]
         
-        # Basic email validation
-        if not re.match(r'^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$', recipient):
-            self.logger.error(f"Invalid email address format: '{recipient}'")
+        if not recipients:
+            self.logger.debug("No valid email recipients specified, skipping email")
+            return True
+        
+        # Validate all email addresses
+        email_pattern = re.compile(r'^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$')
+        invalid_emails = [r for r in recipients if not email_pattern.match(r)]
+        
+        if invalid_emails:
+            self.logger.error(f"Invalid email address format: {', '.join(invalid_emails)}")
             return False
         
-        self.logger.debug(f"Preparing to send email report to: {recipient}")
+        self.logger.debug(f"Preparing to send email report to: {', '.join(recipients)}")
         
         # Determine period description
         if self.start_date and self.end_date:
@@ -537,7 +544,7 @@ class CUPSMonitor:
             period_desc = f"Last {self.time_period_hours} hours"
         
         if self.dry_run:
-            self.logger.info(f"DRY RUN: Would send email to {recipient}")
+            self.logger.info(f"DRY RUN: Would send email to {', '.join(recipients)}")
             if self.attach_csv:
                 self.logger.info(f"DRY RUN: Would attach file: {output_file}")
             return True
@@ -546,7 +553,7 @@ class CUPSMonitor:
             # Create message
             msg = MIMEMultipart()
             msg['From'] = f"{SCRIPT_NAME}@{socket.gethostname()}"
-            msg['To'] = recipient
+            msg['To'] = ', '.join(recipients)
             msg['Subject'] = self.email_subject
             
             
@@ -573,19 +580,25 @@ Period: {period_desc}
             
             # Attach CSV if requested
             if self.attach_csv and os.path.isfile(output_file):
+                self.logger.debug(f"Attaching CSV file: {output_file}")
                 with open(output_file, 'rb') as f:
-                    part = MIMEBase('application', 'octet-stream')
+                    part = MIMEBase('text', 'csv')
                     part.set_payload(f.read())
                     encoders.encode_base64(part)
                     part.add_header('Content-Disposition', 
                                   f'attachment; filename={Path(output_file).name}')
                     msg.attach(part)
+                self.logger.debug(f"CSV file attached successfully")
+            elif self.attach_csv:
+                self.logger.warning(f"attach_csv is True but file does not exist: {output_file}")
+            else:
+                self.logger.debug(f"Skipping CSV attachment (attach_csv={self.attach_csv})")
             
             # Send email using local sendmail
             with smtplib.SMTP('localhost') as server:
                 server.send_message(msg)
             
-            self.logger.info(f"Email report sent to: {recipient}")
+            self.logger.info(f"Email report sent to: {', '.join(recipients)}")
             return True
             
         except Exception as e:
