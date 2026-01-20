@@ -5,6 +5,13 @@ defaults:
   # Output file for print activity summary (data is appended for historical tracking)
   output_file: "/var/log/print_activity.csv"
   
+
+  # Date range for monitoring (YYYY-MM-DD format)
+  # If both start_date and end_date are set, they override time_period_hours
+  # Leave blank or comment out to use time_period_hours instead
+  start_date: ""  # Example: "2025-11-01"
+  end_date: ""    # Example: "2025-11-07"
+
   # Time period to monitor (in hours)
   # How many hours back to look for print activity
   time_period_hours: 24
