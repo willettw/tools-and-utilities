@@ -64,6 +64,18 @@ defaults:
     
     # Systemd service name for journal-based logging
     service_name: "cups"
+  
+  # IRIS database settings for enriching printer data
+  iris:
+    # IRIS instance name
+    instance: "prd"
+    
+    # IRIS namespace
+    namespace: "prd"
+    
+    # IRIS routine to get printer info: EPRInfo^ZwwUtilities(printer)
+    # Returns: EPR_ID|EPR_Name|Default_Command
+    routine: "EPRInfo^ZwwUtilities"
 
 # Example configurations for different scenarios:
 
