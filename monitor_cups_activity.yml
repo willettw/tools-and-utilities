@@ -1,0 +1,115 @@
+# Configuration file for monitor_cups_activity.sh
+# Provides default values for script execution
+
+defaults:
+  # Output file for print activity summary (data is appended for historical tracking)
+  output_file: "/var/log/print_activity.csv"
+  
+
+  # Date range for monitoring (YYYY-MM-DD format)
+  # If both start_date and end_date are set, they override time_period_hours
+  # Leave blank or comment out to use time_period_hours instead
+  start_date: ""  # Example: "2025-11-01"
+  end_date: ""    # Example: "2025-11-07"
+
+  # Time period to monitor (in hours)
+  # How many hours back to look for print activity
+  time_period_hours: 24
+  
+  # Email settings
+  email:
+    # Email address to send results to
+    recipient: "wwillett@institute.org"
+    
+    # Email subject line
+    subject: "CUPS Print Activity Report - $(hostname)"
+    
+    # SMTP settings (if using external SMTP)
+    # Leave empty to use local mail system
+    smtp_server: ""
+    smtp_port: ""
+    smtp_username: ""
+    smtp_password: ""
+    
+    # Whether to attach the CSV file to the email
+    attach_csv: true
+    
+    # Whether to include the summary in the email body
+    include_summary_in_body: true
+  
+  # Logging settings
+  log_file: "/var/log/monitor_cups_activity.log"
+  
+  # Temporary directory for working files
+  temp_dir: "/tmp"
+  
+  # Enable debug mode (boolean)
+  debug: false
+  
+  # Enable verbose mode (boolean)
+  verbose: false
+  
+  # Dry run mode - show what would be done without actually doing it (boolean)
+  dry_run: false
+  
+  # CUPS log locations
+  cups:
+    # CUPS configuration file to check logging method
+    config_file: "/etc/cups/cups-files.conf"
+    
+    # File-based log locations
+    page_log: "/var/log/cups/page_log"
+    access_log: "/var/log/cups/access_log"
+    error_log: "/var/log/cups/error_log"
+    
+    # Systemd service name for journal-based logging
+    service_name: "cups"
+  
+  # IRIS database settings for enriching printer data
+  iris:
+    # IRIS instance name
+    instance: "prd"
+    
+    # IRIS namespace
+    namespace: "prd"
+    
+    # IRIS routine to get printer info: EPRInfo^ZwwUtilities(printer)
+    # Returns: EPR_ID|EPR_Name|Default_Command
+    routine: "EPRInfo^ZwwUtilities"
+
+# Example configurations for different scenarios:
+
+# Configuration for daily reports:
+# defaults:
+#   time_period_hours: 24    # Last day
+#   email:
+#     subject: "Daily CUPS Print Activity Report - $(hostname)"
+#     recipient: "wwillett@institute.org"
+
+# Configuration for weekly reports:
+# defaults:
+#   time_period_hours: 168  # 7 days
+#   email:
+#     subject: "Weekly CUPS Print Activity Report - $(hostname)"
+#     recipient: "admin@company.com"
+
+# Configuration for monthly reports:
+# defaults:
+#   time_period_hours: 720  # 30 days
+#   email:
+#     subject: "Monthly CUPS Print Activity Report - $(hostname)"
+#     recipient: "admin@company.com"
+
+# Configuration for quarterly reports:
+# defaults:
+#   time_period_hours: 2160  # 90 days
+#   email:
+#     subject: "Quarterly CUPS Print Activity Report - $(hostname)"
+#     recipient: "admin@company.com"
+
+# Configuration for debug mode:
+# defaults:
+#   debug: true
+#   verbose: true
+#   dry_run: true
+#   output_file: "/tmp/print_activity_debug.csv"
