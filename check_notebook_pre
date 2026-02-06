@@ -1,0 +1,63 @@
+#!/bin/bash
+
+# Formatting
+BOLD='\033[1m'
+GREEN='\033[0;32m'
+RED='\033[0;31m'
+NC='\033[0m' # No Color
+
+echo -e "${BOLD}Checking Open NotebookLM Prerequisites for Fedora 41...${NC}\n"
+
+# 1. Check Python Version (Requires 3.12+)
+PYTHON_VERSION=$(python3 -c 'import sys; print(".".join(map(str, sys.version_info[:2])))' 2>/dev/null)
+if [[ $(echo "$PYTHON_VERSION >= 3.12" | bc) -eq 1 ]]; then
+    echo -e "[${GREEN}PASS${NC}] Python Version: $PYTHON_VERSION"
+else
+    echo -e "[${RED}FAIL${NC}] Python 3.12+ required. Found: $PYTHON_VERSION"
+fi
+
+# 2. Check Docker
+if command -v docker &> /dev/null; then
+    echo -e "[${GREEN}PASS${NC}] Docker is installed."
+    # Check if user is in docker group
+    if groups | grep -q "\bdocker\b"; then
+        echo -e "      - User is in 'docker' group."
+    else
+        echo -e "[${RED}WARN${NC}] User NOT in 'docker' group. Use 'sudo usermod -aG docker $USER'."
+    fi
+else
+    echo -e "[${RED}FAIL${NC}] Docker not found. Install with 'sudo dnf install moby-engine docker-compose'."
+fi
+
+# 3. Check NVIDIA/CUDA (For GPU Acceleration)
+if command -v nvidia-smi &> /dev/null; then
+    VRAM=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits | head -n 1)
+    echo -e "[${GREEN}PASS${NC}] NVIDIA GPU Detected ($((VRAM / 1024))GB VRAM)."
+    
+    # Check for NVIDIA Container Toolkit (Needed for Docker to see GPU)
+    if command -v nvidia-ctk &> /dev/null; then
+        echo -e "[${GREEN}PASS${NC}] NVIDIA Container Toolkit is installed."
+    else
+        echo -e "[${RED}FAIL${NC}] NVIDIA Container Toolkit missing. Required for GPU in Docker."
+    fi
+else
+    echo -e "[${RED}WARN${NC}] No NVIDIA GPU detected. Model will run slow on CPU."
+fi
+
+# 4. Check RAM (Recommended 16GB+)
+TOTAL_RAM=$(free -g | awk '/^Mem:/{print $2}')
+if [ "$TOTAL_RAM" -ge 15 ]; then
+    echo -e "[${GREEN}PASS${NC}] RAM: ${TOTAL_RAM}GB"
+else
+    echo -e "[${RED}WARN${NC}] RAM: ${TOTAL_RAM}GB (16GB recommended for local LLMs)."
+fi
+
+# 5. Check Disk Space (10GB+ Free)
+FREE_SPACE=$(df -BG . | awk 'NR==2 {print $4}' | sed 's/G//')
+if [ "$FREE_SPACE" -ge 10 ]; then
+    echo -e "[${GREEN}PASS${NC}] Free Disk Space: ${FREE_SPACE}GB"
+else
+    echo -e "[${RED}FAIL${NC}] Disk Space: ${FREE_SPACE}GB (10GB+ required)."
+fi
+
+echo -e "\n${BOLD}Verification Complete.${NC}"
