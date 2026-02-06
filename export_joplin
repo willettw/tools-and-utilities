@@ -1,0 +1,12 @@
+#!/bin/bash
+# Path to your NotebookLM source folder
+DEST="/home/wwillett/tmp/jopsync"
+
+# Clean the directory first to prevent "Path is a directory" or duplicate errors
+rm -rf "$DEST"/*
+
+# Run the export
+joplin export --format md --profile ~/.config/joplin-desktop "$DEST"
+
+echo $(date +%Y%m%d-%H%M%S)" - Export to $DEST complete."
+
