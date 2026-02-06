@@ -1,0 +1,202 @@
+#!/bin/bash
+
+#################################################################################
+# checkRoutine - Check if IRIS routines exist across multiple environments
+#
+# Description: This script checks for the existence of specified IRIS routines
+#              across multiple environments and displays a formatted report.
+#
+# Usage: checkRoutine [--all | env1 env2 ...] --routines routine1,routine2,...
+#
+# Examples:
+#   checkRoutine poc tst --routines MYTEST,YOURTEST
+#   checkRoutine --all --routines UTIL01
+#   checkRoutine sup rel prd --routines TEST1,TEST2,TEST3
+#
+# Author: wwillett
+# Date: 2025-01-29
+# Version: 1.0
+#################################################################################
+
+# Environment to server mapping
+declare -A env_servers=(
+    ["poc"]="srv-02-1100"
+    ["tst"]="srv-02-1100" 
+    ["sup"]="srv-02-1102"
+    ["rel"]="srv-02-1102"
+    ["prd"]="srv-02-1103"
+    ["rpt"]="srv-02-1104"
+    ["mst"]="srv-02-1105"
+    ["ref"]="srv-02-1105"
+    ["prep"]="srv-02-1105"
+    ["ace01"]="srv-02-1105"
+    ["ace02"]="srv-02-1105"
+    ["ply"]="srv-02-1105"
+    ["nvt"]="srv-02-1105"
+    ["exm"]="srv-02-1105"
+)
+
+# All environments in order
+all_envs=("poc" "tst" "sup" "rel" "prd" "rpt" "mst" "ref" "prep" "ace01" "ace02" "ply" "nvt" "exm")
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Function to display usage
+usage() {
+    echo "Usage: $0 [--all | env1 env2 ...] --routines routine1,routine2,..."
+    echo ""
+    echo "Options:"
+    echo "  --all                Check all environments"
+    echo "  --routines ROUTINES  Comma-separated list of routine names to check"
+    echo ""
+    echo "Available environments:"
+    echo "  poc, tst, sup, rel, prd, rpt, mst, ref, prep, ace01, ace02, ply, nvt, exm"
+    echo ""
+    echo "Examples:"
+    echo "  $0 poc tst --routines MYTEST,YOURTEST"
+    echo "  $0 --all --routines UTIL01"
+    echo "  $0 sup rel prd --routines TEST1,TEST2,TEST3"
+    exit 1
+}
+
+# Function to check if routine exists in environment
+check_routine() {
+    local env="$1"
+    local routine="$2"
+    local server="${env_servers[$env]}"
+    
+    # SSH command to check if routine exists by attempting to load it
+    # Using ZLOAD which will succeed if routine exists, fail if not
+    local command="ssh \"$server\" \"iris session $env -U $env <<EOF
+zl $routine
+w \"EXISTS\"
+h
+EOF\""
+    echo "DEBUG: Command: $command" >&2
+    local result=$(ssh "$server" "iris session $env -U $env <<EOF
+zl $routine
+w \"EXISTS\"
+h
+EOF" 2>/dev/null | tail -1 | tr -d '\r\n')
+    echo "DEBUG: Result: '$result'" >&2
+    
+    # Return 0 if routine exists, 1 if not
+    if [[ "$result" == *"EXISTS"* ]]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+# Parse command line arguments
+envs_to_check=()
+routines=""
+check_all=false
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --all)
+            check_all=true
+            shift
+            ;;
+        --routines)
+            routines="$2"
+            shift 2
+            ;;
+        --help|-h)
+            usage
+            ;;
+        -*)
+            echo "Unknown option $1"
+            usage
+            ;;
+        *)
+            # Check if it's a valid environment
+            if [[ " ${all_envs[@]} " =~ " $1 " ]]; then
+                envs_to_check+=("$1")
+            else
+                echo "Invalid environment: $1"
+                echo "Valid environments: ${all_envs[*]}"
+                exit 1
+            fi
+            shift
+            ;;
+    esac
+done
+
+# Validate arguments
+if [[ -z "$routines" ]]; then
+    echo "Error: --routines parameter is required"
+    usage
+fi
+
+if [[ "$check_all" == true ]]; then
+    envs_to_check=("${all_envs[@]}")
+elif [[ ${#envs_to_check[@]} -eq 0 ]]; then
+    echo "Error: No environments specified. Use --all or specify environment names."
+    usage
+fi
+
+# Convert comma-separated routines to array
+IFS=',' read -ra routine_array <<< "$routines"
+
+# Print header
+echo -e "${BLUE}╔════════════════════════════════════════════════════════════════════════════════╗${NC}"
+echo -e "${BLUE}║                            IRIS Routine Existence Check                       ║${NC}"
+echo -e "${BLUE}╚════════════════════════════════════════════════════════════════════════════════╝${NC}"
+echo ""
+
+# Print routine list
+echo -e "${YELLOW}Checking routines:${NC} ${routine_array[*]}"
+echo -e "${YELLOW}Environments:${NC} ${envs_to_check[*]}"
+echo ""
+
+# Calculate column widths
+max_env_width=0
+for env in "${envs_to_check[@]}"; do
+    if [[ ${#env} -gt $max_env_width ]]; then
+        max_env_width=${#env}
+    fi
+done
+# Minimum width for environment column
+if [[ $max_env_width -lt 12 ]]; then
+    max_env_width=12
+fi
+
+# Print results for each routine
+for routine in "${routine_array[@]}"; do
+    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${YELLOW}Routine: ${routine}${NC}"
+    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    
+    # Print table header
+    printf "%-${max_env_width}s %-10s %-15s %s\n" "Environment" "Server" "Status" "Details"
+    printf "%*s %*s %*s %s\n" $max_env_width "$(printf '%*s' $max_env_width '' | tr ' ' '-')" 10 "$(printf '%*s' 10 '' | tr ' ' '-')" 15 "$(printf '%*s' 15 '' | tr ' ' '-')" "-------"
+    
+    # Check each environment
+    for env in "${envs_to_check[@]}"; do
+        server="${env_servers[$env]}"
+        
+        echo -n "Checking $env..."
+        if check_routine "$env" "$routine"; then
+            status="${GREEN}EXISTS${NC}"
+            details="Routine found"
+        else
+            status="${RED}NOT FOUND${NC}"
+            details="Routine does not exist"
+        fi
+        
+        # Clear the "Checking..." line and print result
+        echo -e "\r$(printf "%-${max_env_width}s %-10s %-24s %s" "$env" "$server" "$status" "$details")"
+    done
+    echo ""
+done
+
+echo -e "${BLUE}╔════════════════════════════════════════════════════════════════════════════════╗${NC}"
+echo -e "${BLUE}║                                Check Complete                                  ║${NC}"
+echo -e "${BLUE}╚════════════════════════════════════════════════════════════════════════════════╝${NC}"
