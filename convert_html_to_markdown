@@ -1,0 +1,208 @@
+#!/usr/bin/env python3
+
+import os
+import pypandoc
+import re
+from pathlib import Path
+from collections import defaultdict
+
+# Set your export directory and destination vault
+export_dir = os.path.expanduser("~/Documents/JoplinExport")
+vault_dir = os.path.expanduser("~/knowledgebase")
+
+def clean_duplicates_in_vault(vault_directory):
+    """Find and delete duplicate markdown files in the vault.
+    
+    If both 'file.md' and 'file-1.md' (or file-2.md, etc.) exist in the same folder,
+    the versioned files will be deleted, keeping only the base version.
+    """
+    vault = Path(vault_directory)
+    
+    if not vault.exists():
+        print(f"Vault directory does not exist: {vault_directory}")
+        return
+    
+    # Find all markdown files
+    print("  Scanning for markdown files...")
+    md_files = list(vault.rglob("*.md"))
+    print(f"  Found {len(md_files)} markdown files")
+    
+    # Group files by directory and base name
+    file_groups = defaultdict(list)
+    
+    for md_file in md_files:
+        parent_dir = md_file.parent
+        filename = md_file.name
+        
+        # Check if file has a version suffix pattern (e.g., -1, -2, etc.)
+        match = re.match(r'^(.+?)(-\d+)?\.md$', filename)
+        if match:
+            base_name = match.group(1)
+            version_suffix = match.group(2)
+            
+            # Store as (directory, base_name): [(full_path, has_version_suffix)]
+            key = (parent_dir, base_name)
+            file_groups[key].append((md_file, version_suffix is not None))
+    
+    deleted_count = 0
+    
+    # Process each group
+    for (parent_dir, base_name), files in file_groups.items():
+        # Check if base version exists
+        has_base_version = any(not has_suffix for _, has_suffix in files)
+        
+        if has_base_version:
+            # Delete all versioned files
+            for file_path, has_suffix in files:
+                if has_suffix:
+                    try:
+                        file_path.unlink()
+                        print(f"Deleted duplicate: {file_path}")
+                        deleted_count += 1
+                    except Exception as e:
+                        print(f"Failed to delete {file_path}: {e}")
+    
+    return deleted_count
+
+def fix_image_links(md_content, md_file_path):
+    """Fix broken image links in markdown content."""
+    # Ensure md_content is a string, not a Path object
+    if not isinstance(md_content, str):
+        raise TypeError(f"md_content must be a string, got {type(md_content)}")
+    
+    # Pattern to match markdown image syntax: ![alt text](path)
+    image_pattern = re.compile(r'!\[([^\]]*)\]\(([^)]+)\)')
+    
+    def check_and_fix_link(match):
+        alt_text = match.group(1)
+        image_path = match.group(2)
+        
+        # Skip external URLs
+        if image_path.startswith(('http://', 'https://', 'ftp://')):
+            return match.group(0)
+        
+        # Resolve the image path relative to the markdown file
+        md_dir = md_file_path.parent
+        full_image_path = (md_dir / image_path).resolve()
+        
+        # Check if the image exists
+        if full_image_path.exists():
+            return match.group(0)  # Path is correct, no change needed
+        
+        # Try to find the image in common locations
+        image_filename = Path(image_path).name
+        
+        # Search in _resources folder at the export root
+        resources_dir = Path(export_dir) / "_resources"
+        if resources_dir.exists():
+            resource_file = resources_dir / image_filename
+            if resource_file.exists():
+                # Calculate relative path from md_file to resource
+                try:
+                    rel_path = os.path.relpath(resource_file, md_dir)
+                    print(f"  Fixed image link: {image_path} -> {rel_path}")
+                    return f'![{alt_text}]({rel_path})'
+                except ValueError:
+                    pass
+        
+        # Skip recursive search as it's too slow
+        # If we can't find it in _resources, leave it unchanged
+        return match.group(0)
+    
+    # Replace all image links with fixed versions
+    fixed_content = image_pattern.sub(check_and_fix_link, md_content)
+    return fixed_content
+
+def convert_html_to_md(directory, vault_directory):
+    path = Path(directory)
+    vault = Path(vault_directory)
+    
+    if not path.exists():
+        print(f"Error: {directory} does not exist.")
+        return
+
+    html_files = list(path.rglob("*.html"))
+    total_files = len(html_files)
+    print(f"Found {total_files} HTML files. Starting conversion...\n")
+    
+    skipped_count = 0
+    converted_count = 0
+    processed = 0
+
+    for html_file in html_files:
+        processed += 1
+        # Skip versioned HTML files (e.g., file-1.html, file-2.html)
+        # Only convert base versions (file.html)
+        stem = html_file.stem  # filename without extension
+        if re.match(r'^.+-\d+$', stem):
+            # This is a versioned file (ends with -number)
+            skipped_count += 1
+            if processed % 50 == 0:
+                print(f"Progress: {processed}/{total_files} files processed ({skipped_count} skipped, {converted_count} converted)")
+            continue
+        # Calculate relative path from export_dir
+        rel_path = html_file.relative_to(path)
+        
+        # Create corresponding path in vault with .md extension
+        md_file = vault / rel_path.with_suffix(".md")
+        
+        # Create parent directories in vault if they don't exist
+        md_file.parent.mkdir(parents=True, exist_ok=True)
+        
+        try:
+            # Show progress every 100 files
+            if processed % 100 == 0:
+                print(f"Progress: {processed}/{total_files} files processed ({skipped_count} skipped, {converted_count} converted)")
+            
+            # Convert HTML to Github-Flavored Markdown
+            # Use convert_text instead of convert_file to avoid pypandoc bug with certain files
+            # (pypandoc v1.16.2 with Python 3.14 has an issue where it tries to iterate over
+            # a PosixPath object instead of a list when processing certain file paths)
+            with open(html_file, 'r', encoding='utf-8') as f:
+                html_content = f.read()
+            
+            output = pypandoc.convert_text(html_content, 'gfm', format='html')
+            
+            # Fix broken image links - wrap in its own try/except
+            try:
+                output = fix_image_links(output, md_file)
+            except (TypeError, ValueError, OSError) as img_error:
+                # If image link fixing fails, continue with unconverted output
+                print(f"  Warning: Could not fix image links in {html_file.name}: {img_error}")
+            
+            with open(md_file, "w", encoding="utf-8") as f:
+                f.write(output)
+            
+            converted_count += 1
+            # Only print every 100th conversion to reduce output
+            if converted_count % 100 == 0:
+                print(f"Converted {converted_count} files (latest: {html_file.name})")
+            
+            # Optional: Remove the original HTML file after successful conversion
+            # os.remove(html_file)
+            
+        except (TypeError, OSError, ValueError) as e:
+            print(f"Failed to convert {html_file.name}: {type(e).__name__}: {e}")
+        except Exception as e:
+            print(f"Failed to convert {html_file.name}: {e}")
+    
+    print(f"\nConversion complete: {converted_count} files converted, {skipped_count} versioned files skipped")
+
+if __name__ == "__main__":
+    print("=" * 60)
+    print("STEP 1: Cleaning duplicates in knowledgebase (BEFORE conversion)")
+    print("=" * 60)
+    deleted1 = clean_duplicates_in_vault(vault_dir)
+    print(f"Deleted {deleted1} duplicate file(s)\n")
+    
+    print("=" * 60)
+    print("STEP 2: Converting HTML files to Markdown")
+    print("=" * 60)
+    convert_html_to_md(export_dir, vault_dir)
+    
+
+    print("\n" + "=" * 60)
+    print("STEP 3: Cleaning duplicates in knowledgebase (AFTER conversion)")
+    print("=" * 60)
+    deleted2 = clean_duplicates_in_vault(vault_dir)
+    print(f"Deleted {deleted2} duplicate file(s)")
