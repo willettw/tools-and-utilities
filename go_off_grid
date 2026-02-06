@@ -1,0 +1,61 @@
+#!/usr/bin/env python
+#
+# go_off_grid.py
+#
+# take system off grid
+#
+
+import time
+import os
+from datetime import datetime
+from tesla_powerwall import (
+    Powerwall,
+    IslandMode
+)
+
+def go_on_grid():
+    power_wall.set_island_mode(IslandMode.ONGRID)
+
+def go_off_grid():
+    power_wall.set_island_mode(IslandMode.OFFGRID)
+
+def get_battery_percentage():
+    battery = power_wall.get_batteries()
+    cap0 = battery[0].capacity
+    cap1 = battery[1].capacity
+    rem0 = battery[0].energy_remaining
+    rem1 = battery[1].energy_remaining
+    return ((rem0 + rem1) / (cap0 + cap1))*100
+
+def get_stat():
+    x = ""
+    stat = power_wall.get_grid_status()
+    if stat.CONNECTED:
+        x = "Connected"
+    if stat.ISLANDED:
+        x = "Islanded"
+    return x
+    
+ip = "192.168.86.163"
+password = "Tim-Dead-Wrong-5!"
+
+power_wall = Powerwall(ip)
+power_wall.login(password)
+
+last_percent_remaining = 0
+
+# Main
+grid_status = get_stat()
+percent_remaining = get_battery_percentage()
+
+go_off_grid()
+    
+
+msg = "Subject:Powerwall Update\nTo:Wes\n\nPercent Remaining : {:.2f}".format(percent_remaining) + "\n" + grid_status
+
+last_percent_remaining = percent_remaining
+dt = datetime.now()
+line = str(dt.strftime("%Y")) + str(dt.strftime("%m")) + str(dt.strftime("%d")) + " | " + str(dt.strftime("%H")) + ":" + str(dt.strftime("%M")) + ":" + str(dt.strftime("%S")) + " | " + msg + '\n'
+
+print(line)
+
