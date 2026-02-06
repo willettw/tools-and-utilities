@@ -1,0 +1,61 @@
+#!/bin/bash
+
+# Check if the correct number of parameters were passed
+if [ "$#" -ne 2 ]; then
+    echo "Usage: $0 input_file output_file"
+    echo "Example: $0 input.txt output.html"
+    exit 1
+fi
+
+# Get the input and output file names
+input="$1"
+output="$2"
+
+# Define the CSS for the colors
+css="
+<style>
+body {
+   font-family : monospace;
+   font-size : 1.5em;
+   color : white;
+   color : black;
+   background-color : #36454F; 
+   background-color : #D3D3D3;
+}
+.bright-red { color: red; font-weight:bold;}
+.bright-green { color: green; font-weight:bold;}
+.bright-yellow { color: yellow; }
+.bright-blue { color: blue; font-weight:bold;}
+.bright-lavender { color: magenta; font-weight:bold;}
+.bright-cyan { color: cyan; font-weight:bold;}
+.bright-white { color: white; font-weight:bold;}
+.black { color: black;}
+</style>
+"
+
+# Open the output file for writing
+echo "<html>" > "$output"
+echo "$css" >> "$output"
+#echo "<pre>" >> "$output"
+echo "<body><pre>" >> "$output"
+
+# Loop through each line in the input file
+while read -r line; do
+    # Replace the color codes with CSS classes
+    line="${line//[30;1m/<span class=\"bright-grey\">}"
+    line="${line//[31;1m/<span class=\"bright-red\">}"
+    line="${line//[32;1m/<span class=\"bright-green\">}"
+    line="${line//[33;1m/<span class=\"bright-yellow\">}"
+    line="${line//[34;1m/<span class=\"bright-blue\">}"
+    line="${line//[35;1m/<span class=\"bright-lavender\">}"
+    line="${line//[36;1m/<span class=\"black\">}"
+#    line="${line//[36;1m/<span class=\"bright-cyan\">}"
+    line="${line//[37;1m/<span class=\"bright-white\">}"
+    line="${line//[39m/</span>}"
+
+    # Write the line to the output file
+    echo "$line" >> "$output"
+done < "$input"
+
+# Close the pre tag and the output file
+echo "</pre></body></html>" >> "$output"
