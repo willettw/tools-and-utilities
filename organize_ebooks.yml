@@ -1,0 +1,282 @@
+# organize_ebooks.yml
+# Parameters for organize_ebooks.py
+verbose: false
+debug: false
+logfile: /home/wwillett/logs/
+library: /mnt/data/ebooks/
+inventory: /mnt/data/ebooks/inventory.csv
+known_authors:
+  - Zelazny, Roger
+  - Clarke, Arthur C.
+  - Cherryh, CJ
+  - Baum, L Frank
+  - Asaro, Catherine
+  - Cook, Glen
+  - Wicker, Chad C.
+  - AA Attanasio
+  - AE Van Vogt
+  - Aaron Allston
+  - Alan Dean Foster
+  - Alexander Lazarevich
+  - Alexander Lloyd
+  - Alfred Bester
+  - Andre Norton
+  - Angela Knight
+  - Anne Bishop
+  - Anne McCaffrey
+  - Arthur C. Clarke
+  - Arthur K Barnes
+  - Barbara Hambly
+  - Barry Longyear
+  - Ben Bova
+  - Brian Herbert
+  - Brian Jacques
+  - Brian Lumley
+  - Brian W Aldiss
+  - Bruce Sterling
+  - C.J. Cherryh
+  - C.S. Friedman
+  - CATHERINE MOORE KUTT
+  - CE Murphy
+  - Carlos Castaneda
+  - Carol Berg
+  - Charlaine Harris
+  - Charles De Lint
+  - Charles Sheffield
+  - Charles Stross
+  - Charles de Lint
+  - Chelsea Quinn Yarbro
+  - Chris Bunch
+  - Christine Feehan
+  - Christopher Anvil
+  - Christopher Paolini
+  - Christopher Pike
+  - Christopher Rowley
+  - Christopher Stasheff
+  - Clifford D Simak
+  - Clive Barker
+  - Colin Wilson
+  - Craig Shaw Gardner
+  - DF Jones
+  - Dan Simmons
+  - Dave Duncan
+  - David Brin
+  - David Drake
+  - David Eddings
+  - David Farland
+  - David Gemmell
+  - David Gerrold
+  - David Weber
+  - Dean Ing
+  - Dennis Schmidt
+  - Diana Gabaldon
+  - Diana Wynne Jones
+  - Don Callander
+  - Douglas Adams
+  - Douglas Niles
+  - Duncan Long
+  - Duncan Long. doc
+  - EE Doc Smith
+  - Edgar Rice Burroughs
+  - Elizabeth Ann Scarborough
+  - Elizabeth Haydon
+  - Elizabeth Moon
+  - Eric Flint
+  - Eric Van Lustbader
+  - Eric van Lustbader
+  - Esther Friesner
+  - FM Busby
+  - Frank Herbert
+  - Fred Saberhagen
+  - Frederik Pohl
+  - Fritz Leiber
+  - George RR Martin
+  - Glen Cook
+  - Gordon Dickson
+  - Gordon R. Dickson
+  - Greg Bear
+  - Gregory Benford
+  - Guy Gavriel Kay
+  - H Beam Piper
+  - Hal Clement
+  - Harry Harrison
+  - Harry Turtledove
+  - Henry Kuttner
+  - Holly Lisle
+  - INC HEREAFTER
+  - Iain Banks
+  - Ian Banks
+  - Inc Intangibles
+  - Isaac Asimov
+  - J Gregory Keyes
+  - J. D. Robb
+  - J.R.R. Tolkien
+  - JD Robb
+  - Jack C Haldeman
+  - Jack Chalker
+  - Jack L Chalker
+  - Jack Vance
+  - James Gunn
+  - James P Hogan
+  - James Schmitz
+  - Jane Lindskold
+  - Jane Yolen
+  - Janny Wurts
+  - Jaqueline Carey
+  - Jeffrey A Carver
+  - Jennifer Fallon
+  - Jennifer Roberson
+  - Jerry Pournelle
+  - Jim Butcher
+  - Joan D Vinge
+  - Joe Haldeman
+  - John Brunner
+  - John Christopher
+  - John Dalmas
+  - John Gregory Betancourt
+  - John Norman
+  - John Ringo
+  - John Varley
+  - John Whitman
+  - Jonathan Stroud
+  - Julian May
+  - KD Wentworth
+  - Kate Elliott
+  - Katharine Kerr
+  - Katherine Kurtz
+  - Keith Laumer
+  - Kelley Armstrong
+  - Kenneth Flint
+  - Kevin J Anderson
+  - Kevin J. Anderson
+  - Kim Stanley Robinson
+  - L Frank Baum
+  - L Ron Hubbard
+  - L Sprague De Camp
+  - L.E. Modesitt
+  - Larry Niven
+  - Laurell Hamilton
+  - Laurell K Hamilton
+  - Lawrence Watt-Evans
+  - Lemony Snicket
+  - Leo Frankowski
+  - Lester Del Rey
+  - Like Dust Stars
+  - Lilith Saintcrow
+  - Lloyd Alexander
+  - Lois McMaster Bujold
+  - Louise Cooper
+  - Lyndon Hardy
+  - Lynn Flewelling
+  - MR Sellars
+  - Madeleine L'Engle
+  - Margaret Weis
+  - Marion Zimmer Bradley
+  - Martin Caidin
+  - Mary Brown
+  - Mary Janice Davidson
+  - May Julian
+  - Melanie Rawn
+  - Mercedes Lackey
+  - Michael A Stackpole
+  - Michael Moorcock
+  - Michael Z Williamson
+  - Michele Bardsley
+  - Michelle West
+  - Mike Resnick
+  - Murray Leinster
+  - Neal Stephenson
+  - Neil Gaiman
+  - Nick Pollotta
+  - Octavia Butler
+  - One Corpse Three Bedrooms
+  - Orson Scott Card
+  - PC Hodgell
+  - PN Elrod
+  - Pat Cadigan
+  - Patricia A McKillip
+  - Patricia Briggs
+  - Patricia C Wrede
+  - Patrick Tilley
+  - Peter F Hamilton
+  - Peter S Beagle
+  - Philip Jose Farmer
+  - Philip K
+  - Philip K Dick
+  - Philip K. Dick
+  - Philip Pullman
+  - Phillip J Farmer
+  - Piers Anthony
+  - Poul Anderson
+  - R.A. Salvatore
+  - Rachel Caine
+  - Ray Bradbury
+  - Raymond E. Feist
+  - Raymond Feist
+  - Religion! Danger
+  - Rick Cook
+  - Robert A Heinlein
+  - Robert Adams
+  - Robert Asprin
+  - Robert E Howard
+  - Robert J Sawyer
+  - Robert Jordan
+  - Robert L Forward
+  - Robert Silverberg
+  - Robin Hobb
+  - Robin McKinley
+  - Roger Zelazny
+  - S.M. Stirling
+  - Samuel R Delany
+  - Sara Douglass
+  - Sean Russell
+  - Sharon Green
+  - Sheri S Tepper
+  - Sheri S. Tepper
+  - Sheri Tepper
+  - Sherrilyn Kenyon
+  - Shirley Meier
+  - Simon Hawke
+  - Simon R Green
+  - Spider Robinson
+  - Stanislaw Lem
+  - Stephen Baxter
+  - Stephen Donaldson
+  - Stephen Lawhead
+  - Stephen R Donaldson
+  - Steve White
+  - Steven Brust
+  - Susan Cooper
+  - Tad Williams
+  - Tamora Pierce
+  - Tanith Lee
+  - Terry Brooks
+  - Terry Goodkind
+  - Terry P
+  - Terry Pr
+  - Terry Prat
+  - Terry Pratchet
+  - Terry Pratchett
+  - Terry Pratchett &
+  - Terry Pratchett an
+  - Tim Powers
+  - Timothy Zahn
+  - Tom Deitz
+  - Trudi Canavan
+  - Ursula K Le Guin
+  - Ursula K LeGuin
+  - Ursula K. Le Guin
+  - Ursula LeGuin
+  - Vampire Quincey Morris
+  - Vernor Vinge
+  - Vonda McIntyre
+  - W Michael Gear
+  - Walter M Miller
+  - Wen Spencer
+  - William C Dietz
+  - William Gibson
+  - William Mark Simmons
+  - William R Forstchen
+  - William Shatner
+
+
