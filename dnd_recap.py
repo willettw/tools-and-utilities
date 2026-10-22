@@ -5,9 +5,10 @@ dnd_recap.py - Email yourself a recap of last week's D&D session, built from Bee
 PURPOSE:
     Finds the Bee AI conversations captured during your weekly D&D night (default: the
     previous Thursday evening) in the local Bee knowledgebase (populated by sync_bee_ai.py),
-    keeps the ones that look like the game (campaign keywords in the title/summary/transcript),
+    keeps the ones that look like the game (campaign keywords in the transcript),
     and has Claude (the `claude` CLI in print mode) write an in-game recap from the transcripts:
     what happened, your character's moments, decisions, NPCs and open threads for next session.
+    Bee's own summaries are not used unless recap.use_bee_summaries is true.
     Household chatter that Bee mixed into the same recording is left out.
     The recap is saved as markdown (<YYYYMMDD>.md) in output.dir -- your Curse of Strahd Sessions
     folder in the knowledgebase -- and emailed. An existing note is never overwritten unless
@@ -24,7 +25,7 @@ EXAMPLES:
     python3 dnd_recap.py --date 2026-10-15 --list
     python3 dnd_recap.py --date 2026-10-15 --conversation 11313276
     python3 dnd_recap.py --dry-run                # print, don't save or send
-    python3 dnd_recap.py --no-llm --dry-run       # Bee summaries only, no Claude call
+    python3 dnd_recap.py --no-llm --dry-run       # Bee summaries only, no Claude call (or recap.use_llm: false)
     python3 dnd_recap.py --sync --verbose
     python3 dnd_recap.py --debug
     python3 dnd_recap.py --config custom_dnd_recap.yml
@@ -73,8 +74,8 @@ VERBOSE = False
 DEBUG = False
 
 RECAP_SYSTEM_PROMPT = """You write session recaps for a tabletop D&D group.
-You are given Bee wearable recordings (auto-generated summaries and rough speech-to-text
-transcripts with no reliable speaker labels) from one evening. Write a recap of the GAME ONLY:
+You are given Bee wearable recordings (rough speech-to-text transcripts with no reliable
+speaker labels) from one evening. Write a recap of the GAME ONLY:
 ignore work talk, household conversation, TV, health and anything else outside the game.
 Transcripts are noisy: names may be misspelled or misheard; prefer the most plausible
 in-world spelling and don't invent events that aren't supported by the material.
@@ -252,9 +253,9 @@ def load_day(kb_dir: Path, day: date) -> List[Dict[str, Any]]:
     return sorted(convs.values(), key=lambda c: c["start"])
 
 
-def keyword_hits(conv: Dict[str, Any], keywords: List[str]) -> int:
-    """Total occurrences of the campaign keywords in the conversation (whole words, case-insensitive)."""
-    blob = " ".join([conv["title"], conv["summary"], conv["transcript"]])
+def keyword_hits(conv: Dict[str, Any], keywords: List[str], use_summaries: bool = False) -> int:
+    """Total occurrences of the campaign keywords (whole words, case-insensitive); Bee's title/summary count only if use_summaries."""
+    blob = " ".join([conv["title"], conv["summary"], conv["transcript"]] if use_summaries else [conv["transcript"]])
     return sum(len(re.findall(rf"(?<!\w){re.escape(k)}(?!\w)", blob, re.I)) for k in keywords)
 
 
@@ -283,11 +284,12 @@ def fmt_day(day: date) -> str:
     return day.strftime("%A, %B %d, %Y").replace(" 0", " ")
 
 
-def build_source(convs: List[Dict[str, Any]], max_chars: int) -> str:
-    """Bee summaries + transcripts, transcripts trimmed evenly if the total is over max_chars."""
-    heads = [f"=== Bee conversation {c['id']} ({fmt_time(c['start'])} - {fmt_time(c['end'])}): {c['title']}\n"
-             f"--- Bee summary ---\n{c['summary']}\n"
-             + "".join(f"- {t}\n" for t in c["takeaways"] + c["actions"]) for c in convs]
+def build_source(convs: List[Dict[str, Any]], max_chars: int, use_summaries: bool = False) -> str:
+    """Transcripts (plus Bee summaries if use_summaries), transcripts trimmed evenly if the total is over max_chars."""
+    heads = [f"=== Bee conversation {c['id']} ({fmt_time(c['start'])} - {fmt_time(c['end'])})\n"
+             + (f"--- Bee summary ({c['title']}) ---\n{c['summary']}\n"
+                + "".join(f"- {t}\n" for t in c["takeaways"] + c["actions"]) if use_summaries else "")
+             for c in convs]
     budget = max(0, max_chars - sum(len(h) for h in heads))
     total = sum(len(c["transcript"]) for c in convs) or 1
     parts = []
@@ -301,12 +303,15 @@ def build_source(convs: List[Dict[str, Any]], max_chars: int) -> str:
 
 
 def run_claude(source: str, day: date, rcfg: Dict[str, Any]) -> str:
+    system_prompt = RECAP_SYSTEM_PROMPT
+    if rcfg.get("use_bee_summaries"):
+        system_prompt += "\n\nBee's auto-generated summaries are included as hints; the transcripts are authoritative."
     instructions = (f"Campaign: {rcfg.get('campaign') or 'unknown'}. "
                     f"The player who wants this recap is {rcfg.get('my_name', 'the player')}"
                     + (f", who plays {rcfg['my_character']}" if rcfg.get("my_character") else "")
                     + f". Session date: {fmt_day(day)}. Write the recap from the material on stdin.")
     cmd = [str(Path(str(rcfg.get("claude_binary", "claude"))).expanduser()), "-p", instructions,
-           "--system-prompt", RECAP_SYSTEM_PROMPT, "--tools", "", "--no-session-persistence",
+           "--system-prompt", system_prompt, "--tools", "", "--no-session-persistence",
            "--output-format", "text"]
     if rcfg.get("model"):
         cmd += ["--model", str(rcfg["model"])]
@@ -319,6 +324,15 @@ def run_claude(source: str, day: date, rcfg: Dict[str, Any]) -> str:
     if r.returncode != 0 or not r.stdout.strip():
         raise RecapError(f"claude exited {r.returncode}: {(r.stderr or r.stdout).strip()[:300]}")
     return r.stdout.strip() + "\n"
+
+
+def transcript_note(day: date, convs: List[Dict[str, Any]], rcfg: Dict[str, Any], reason: str) -> str:
+    """No-Claude note built only from the raw transcripts (no Bee summaries)."""
+    L = [f"# {rcfg.get('campaign') or 'D&D'} session transcript: {fmt_day(day)}", "",
+         f"_Raw Bee transcript ({reason}); not summarized and may include non-game talk._", ""]
+    for c in convs:
+        L += [f"## Conversation {c['id']} ({fmt_time(c['start'])} - {fmt_time(c['end'])})", "", c["transcript"], ""]
+    return "\n".join(L)
 
 
 def bee_fallback(day: date, convs: List[Dict[str, Any]], rcfg: Dict[str, Any], reason: str) -> str:
@@ -477,9 +491,10 @@ def main() -> None:
         if args.sync:
             run_sync(bcfg)
         kb = Path(bcfg["knowledgebase_dir"]).expanduser()
+        use_summaries = bool(rcfg.get("use_bee_summaries", False))
         convs = load_day(kb, day)
         for c in convs:
-            c["hits"] = keyword_hits(c, [str(k) for k in scfg["keywords"]])
+            c["hits"] = keyword_hits(c, [str(k) for k in scfg["keywords"]], use_summaries)
         window = evening_window(day, scfg)
         logit(f"{len(convs)} conversation(s) on {day}")
 
@@ -501,12 +516,16 @@ def main() -> None:
             exit_script(0)
         logit(f"Using conversation(s): {', '.join(c['id'] for c in chosen)}")
 
-        if args.no_llm:
-            recap = bee_fallback(day, chosen, rcfg, "--no-llm")
+        if args.no_llm or not rcfg.get("use_llm", True):
+            why = "--no-llm" if args.no_llm else "recap.use_llm is false"
+            recap = bee_fallback(day, chosen, rcfg, why) if use_summaries else transcript_note(day, chosen, rcfg, why)
         else:
             try:
-                recap = run_claude(build_source(chosen, int(rcfg.get("max_source_chars", 400000))), day, rcfg)
+                recap = run_claude(build_source(chosen, int(rcfg.get("max_source_chars", 400000)), use_summaries),
+                                   day, rcfg)
             except RecapError as ex:
+                if not use_summaries:
+                    raise
                 logit(f"{ex}; falling back to Bee summaries", "WARN")
                 recap = bee_fallback(day, chosen, rcfg, str(ex)[:120])
         recap += f"\n_Source: Bee conversation(s) {', '.join(c['id'] for c in chosen)}_\n"

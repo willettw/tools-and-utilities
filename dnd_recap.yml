@@ -23,6 +23,9 @@ recap:
   campaign: Curse of Strahd
   my_name: Weston
   my_character: Rook         # your character's name, if you want the recap to use it
+  use_llm: true             # false = no Claude call (same as --no-llm); the note is then the raw transcript (or Bee summaries if use_bee_summaries)
+  use_bee_summaries: false   # false = recap and game detection come from the transcripts only; Bee's summaries are never used
+                             # (and if Claude fails the job errors instead of saving a summary-based note)
   claude_binary: /home/wwillett/.local/bin/claude      # full path; cron has a minimal PATH
   model: null                # null = claude CLI default
   timeout_seconds: 600
@@ -33,7 +36,7 @@ output:
   overwrite: false           # false = never replace an existing note (it may have been edited); --force overrides
 
 email:
-  enabled: true
+  enabled: false
   smtp_host: smtp.gmail.com
   smtp_port: 587
   starttls: true
