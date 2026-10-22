@@ -1,0 +1,67 @@
+# meeting_notes.yml - configuration for meeting_notes.py
+#
+# Config file lookup order (see find_config_path() in the script):
+#   1. --config command line argument
+#   2. ./meeting_notes.yml                 (cwd, for local testing)
+#   3. /usr/local/etc/meeting_notes.yml    (installed location)
+
+bee:
+  binary: /home/wwillett/.npm-global/bin/bee      # only used with --sync
+  knowledgebase_dir: /home/wwillett/beeknowledgebase   # populated by sync_bee_ai.py (conversations/YYYY-MM-DD/<id>.md)
+  sync_recent_days: 3                              # --sync pulls this many recent days of conversations first
+  sync_timeout_seconds: 600
+
+# Each entry under `meeting:` is one scheduled meeting; add more entries to cover more meetings
+# (a single mapping instead of a list also works). Every meeting needs a unique `name` and an `output_dir`.
+# Schedule each one in cron with its own line, e.g.:
+#   0 11 * * 4 /usr/local/bin/meeting_notes.py --meeting "Weekly Sr IT"
+meeting:
+  - name: Weekly Sr IT
+    weekday: thursday          # used to pick the default date (most recent such day, today included)
+    start: "10:00"             # local time the meeting normally starts
+    output_dir: "/home/wwillett/knowledgebase/Work/Epic/Meeting Notes/Weekly Sr IT"   # notes are written here as <YYYYMMDD>.md
+    overwrite: false           # false = never replace an existing note (it may have been edited); --force overrides
+    send_email: false          # true = also email the notes (--email / --no-email override per run)
+    to: null                   # null = email.to below
+    subject: null              # null = email.subject below; {name} and {date} are available
+    early_minutes: 15          # a conversation may start this long before `start` and still be the meeting
+    start_slack_minutes: 20    # ...or up to this long after it
+    merge_gap_minutes: 3       # conversations starting within this many minutes of the meeting's end are merged in (Bee splits long recordings)
+    my_name: Weston            # Bee's label for you in transcripts
+    ignore_speakers: [Unknown, Colleague, Team, Everyone, Everybody, Others]   # never listed as attendees
+
+  - name: IFH/Epic Biweekly Technical Call
+    weekday: thursday
+    start: "12:00"             # usually 12:00 - 1:00 PM
+    every_weeks: 2             # runs every other week, counted from anchor_date; off weeks are skipped (--meeting forces)
+    anchor_date: 2026-10-22    # a date this meeting occurred
+    output_dir: "/home/wwillett/knowledgebase/Work/Epic/Meeting Notes/Epic Biweekly Technical Call"
+    overwrite: false
+    send_email: true
+    to: null
+    subject: null
+    early_minutes: 15
+    start_slack_minutes: 20
+    merge_gap_minutes: 3
+    my_name: Weston
+    ignore_speakers: [Unknown, Colleague, Team, Everyone, Everybody, Others]
+
+  # - name: Example Monday Standup
+  #   weekday: monday
+  #   start: "09:30"
+  #   output_dir: "/home/wwillett/knowledgebase/Work/Institute/Meeting Notes"
+  #   send_email: true
+  #   my_name: Weston
+
+email:                       # SMTP settings and defaults, used only when a meeting emails its notes
+  smtp_host: smtp.iufh.local
+  smtp_port: 25
+  from: null                 # null = <user>@<fqdn>
+  to: wwillett@institute.org
+  subject: "{name} Notes - {date}"
+
+logging:
+  verbose: false
+  debug: false
+  clearlog: false
+  logfile: null   # null = ~/logs/meeting_notes.log
