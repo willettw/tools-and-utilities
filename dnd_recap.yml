@@ -1,0 +1,50 @@
+# dnd_recap.yml - configuration for dnd_recap.py
+#
+# Config file lookup order (see find_config_path() in the script):
+#   1. --config command line argument
+#   2. ./dnd_recap.yml                 (cwd, for local testing)
+#   3. /usr/local/etc/dnd_recap.yml    (installed location)
+
+bee:
+  binary: /home/wwillett/.npm-global/bin/bee           # only used with --sync
+  knowledgebase_dir: /home/wwillett/beeknowledgebase   # populated by sync_bee_ai.py (conversations/YYYY-MM-DD/<id>.md)
+  sync_recent_days: 8                                  # --sync pulls this many recent days (covers last week)
+  sync_timeout_seconds: 600
+
+session:
+  weekday: thursday          # default date = the most recent such day BEFORE today
+  evening_start: "17:00"     # a conversation must overlap this local-time window...
+  evening_end: "23:59"
+  min_keyword_hits: 3        # ...and mention the keywords below at least this many times in total
+  keywords: [D&D, DnD, "Dungeons and Dragons", Strahd, Barovia, Barovian, Vallaki, Krezk, Kresk, Vistani,
+             initiative, "roll for", "saving throw", "hit points", "spell slot"]
+
+recap:
+  campaign: Curse of Strahd
+  my_name: Weston
+  my_character: Rook         # your character's name, if you want the recap to use it
+  claude_binary: /home/wwillett/.local/bin/claude      # full path; cron has a minimal PATH
+  model: null                # null = claude CLI default
+  timeout_seconds: 600
+  max_source_chars: 400000   # transcripts are trimmed evenly beyond this
+
+output:
+  dir: "/home/wwillett/knowledgebase/Personal/DnD/Curse of Strahd/Sessions"   # <YYYYMMDD>.md is written here
+  overwrite: false           # false = never replace an existing note (it may have been edited); --force overrides
+
+email:
+  enabled: true
+  smtp_host: smtp.gmail.com
+  smtp_port: 587
+  starttls: true
+  username: weston.willett@gmail.com
+  password: vault:gmail/weston.willett        # Gmail App Password (credvault)
+  from: null                 # null = username
+  to: weston.willett@gmail.com
+  subject: "D&D Recap - {date}"
+
+logging:
+  verbose: false
+  debug: false
+  clearlog: false
+  logfile: null   # null = ~/logs/dnd_recap.log
