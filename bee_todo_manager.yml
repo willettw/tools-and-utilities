@@ -1,0 +1,10 @@
+bee_binary: bee
+limit: 400
+window_size: 1000x700
+font_size: 12   # table text size; also sets the checkbox size
+default_project: Inbox   # prefilled Project for each row (Todoist name, or "Parent / Child")
+
+logging:
+  verbose: false
+  debug: false
+  logfolder: "/usr/local/logs"   # log is written to <logfolder>/bee_todo_manager_YYMMDD.log
