@@ -33,12 +33,14 @@ REQUIREMENTS:
     - credvault (secret todoist/api_token)
     - bee CLI (logged in; see `bee status`)
 
-VERSION: 1.1.0
+VERSION: 1.2.0
 REVISION HISTORY:
     1.0.0 - Initial implementation (2026-10-12)
     1.1.0 - Project column (dropdown of Todoist projects, default_project prefill),
             create projects from the app; --logfolder, logs named <script>_YYMMDD.log
             (2026-10-26)
+    1.2.0 - Hovering over a truncated table cell shows its full text in a tooltip
+            (2026-11-09)
 """
 import argparse
 import calendar
@@ -289,6 +291,58 @@ class NewProjectDialog(tk.Toplevel):
         self.destroy()
 
 
+class CellTooltip:
+    """Shows a cell's full text in a popup when the mouse rests on a Treeview cell
+    whose text is wider than its column (i.e. displayed truncated)."""
+    DELAY_MS = 400
+    PAD = 14  # Treeview's own left/right cell padding, so near-fits still count as truncated
+
+    def __init__(self, tree, cell_font):
+        self.tree, self.font = tree, cell_font
+        self.key = None      # (row, column) under the mouse
+        self.pending = None  # after() id while waiting to show
+        self.tip = None      # the popup Toplevel
+        tree.bind("<Motion>", self.on_motion, add="+")
+        for seq in ("<Leave>", "<ButtonPress>", "<MouseWheel>", "<Button-4>", "<Button-5>", "<KeyPress>"):
+            tree.bind(seq, self.hide, add="+")
+
+    def on_motion(self, event):
+        tree = self.tree
+        row, col = tree.identify_row(event.y), tree.identify_column(event.x)
+        key = (row, col) if row and tree.identify_region(event.x, event.y) == "cell" else None
+        if key == self.key:
+            return
+        self.hide()
+        self.key = key
+        if not key:
+            return
+        column = tree["columns"][int(col[1:]) - 1]
+        text = str(tree.set(row, column))
+        if text and self.font.measure(text) + self.PAD > tree.column(column, "width"):
+            self.pending = tree.after(self.DELAY_MS, self.show, text, event.x_root, event.y_root)
+
+    def show(self, text, x, y):
+        self.pending = None
+        tip = self.tip = tk.Toplevel(self.tree)
+        tip.wm_overrideredirect(True)
+        tk.Label(tip, text=text, justify="left", wraplength=700, font=self.font, background="#ffffe0",
+                 relief="solid", borderwidth=1, padx=6, pady=3).pack()
+        tip.update_idletasks()
+        # keep the popup on screen
+        x = min(x + 12, tip.winfo_screenwidth() - tip.winfo_reqwidth() - 4)
+        y = y + 18 if y + 18 + tip.winfo_reqheight() < tip.winfo_screenheight() else y - tip.winfo_reqheight() - 8
+        tip.wm_geometry(f"+{max(0, x)}+{max(0, y)}")
+
+    def hide(self, _event=None):
+        self.key = None
+        if self.pending:
+            self.tree.after_cancel(self.pending)
+            self.pending = None
+        if self.tip:
+            self.tip.destroy()
+            self.tip = None
+
+
 class TodoApp(tk.Tk):
     COLUMNS = (("check", "\u2611", 40), ("text", "Suggested Todo", 520), ("status", "Status", 80),
                ("due", "Due", 110), ("priority", "Priority", 70), ("project", "Project", 160),
@@ -344,6 +398,7 @@ class TodoApp(tk.Tk):
         self.tree.bind("<<TreeviewSelect>>", self.show_details)
         self.tree.bind("<Double-1>", self.edit_cell)
         self.tree.bind("<Button-1>", self.click_check)
+        self.tooltip = CellTooltip(self.tree, tkfont.Font(font=("TkDefaultFont", size)))
 
         self.details = tk.Text(self, height=8, wrap="word", state="disabled")
         self.details.pack(fill="x")
